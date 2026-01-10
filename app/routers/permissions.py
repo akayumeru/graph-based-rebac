@@ -55,6 +55,32 @@ def get_permission(perm_id: str):
     except Exception as e:
         raise HTTPException(500, detail=f"Database error: {str(e)}")
 
+@router.get("", response_model=List[Permission])
+def list_permissions(key: Optional[str] = Query(None), description: Optional[str] = Query(None)):
+    query = "MATCH (p:Permission)"
+    params = {}
+    conditions = []
+
+    if key:
+        conditions.append("p.key CONTAINS $key")
+        params["key"] = key
+    if description:
+        conditions.append("p.description CONTAINS $description")
+        params["description"] = description
+
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+
+    query += " RETURN elementId(p) AS id, p.key AS key, p.description AS description"
+
+    try:
+        with driver.session() as session:
+            results = session.run(query, **params).data()
+            serialized_results = [serialize_neo4j_data(r) for r in results]
+            return [Permission(**r) for r in serialized_results]
+    except Exception as e:
+        raise HTTPException(500, detail=f"Database error: {str(e)}")
+
 @router.delete("/{perm_id}", status_code=204)
 def delete_permission(perm_id: str): 
     try:
