@@ -67,10 +67,12 @@ def health_check():
             detail=f"Ошибка проверки здоровья: {str(e)}"
         )
 
-from app.routers import users, permissions
+from app.routers import users, permissions, roles, role_relations
 
 app.include_router(users.router)
 app.include_router(permissions.router)
+app.include_router(roles.router)
+app.include_router(role_relations.router)
 
 if __name__ == "__main__":
     import uvicorn
