@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 from app.models.user_role import UserRoleAssign
 from app.main import driver
@@ -78,5 +79,69 @@ def remove_role_from_user(user_id: str, role_id: str):
                 raise HTTPException(404, detail="Role not assigned to this user")
 
         return {"status": "role removed"}
+    except Exception as e:
+        raise HTTPException(500, detail=f"Database error: {str(e)}")
+
+
+@router.get("/{user_id}/roles")
+def get_user_roles(
+        user_id: str,
+        mode: str = Query("direct", pattern="^(direct|effective)$"),
+        at: Optional[datetime] = Query(None),
+        scope: Optional[str] = Query(None)
+) -> List[Dict[str, Any]]:
+    params = {"user_id": user_id}
+    query = """
+    MATCH (u:User {user_id: $user_id})
+    """
+
+    if mode == "direct":
+        query += "-[hr:HAS_ROLE]->(r:Role) "
+    else:
+        query += "-[hr:HAS_ROLE]->(dr:Role)-[:ROLE_INHERITS*0..]->(r:Role) "
+
+    conditions = []
+    if at:
+        conditions.append(
+            "(hr.valid_from IS NULL OR hr.valid_from <= $at) AND (hr.valid_until IS NULL OR hr.valid_until >= $at)")
+        params["at"] = at
+    if scope:
+        conditions.append("hr.scope = $scope")
+        params["scope"] = scope
+
+    if conditions:
+        query += "WHERE " + " AND ".join(conditions)
+
+    query += """
+    RETURN DISTINCT r.key AS role_key,
+           hr.scope AS scope,
+           hr.valid_from AS valid_from,
+           hr.valid_until AS valid_until,
+           hr.can_delete_posts AS can_delete_posts,
+           hr.max_posts_per_day AS max_posts_per_day
+    """
+
+    try:
+        with driver.session() as session:
+            results = session.run(query, **params).data()
+
+            serialized_results = []
+            for r in results:
+                serialized = {}
+                for key, value in r.items():
+                    serialized[key] = serialize_neo4j_data(value)
+                serialized_results.append(serialized)
+
+            return [
+                {
+                    "role": r["role_key"],
+                    "scope": r["scope"],
+                    "valid_from": r["valid_from"],
+                    "valid_until": r["valid_until"],
+                    "can_delete_posts": r["can_delete_posts"],
+                    "max_posts_per_day": r["max_posts_per_day"]
+                }
+                for r in serialized_results if r["role_key"] is not None
+            ]
     except Exception as e:
         raise HTTPException(500, detail=f"Database error: {str(e)}")
