@@ -209,3 +209,70 @@ def decision_role(
             }
     except Exception as e:
         raise HTTPException(500, detail=f"Decision path error: {str(e)}")
+
+
+@router.get("/{user_id}/decision/permission/{perm_key}")
+def decision_permission(
+        user_id: str,
+        perm_key: str,
+        at: Optional[datetime] = Query(None),
+        scope: Optional[str] = Query(None),
+        max_depth: int = Query(5, ge=1, le=10),
+        limit_paths: int = Query(3, ge=1, le=10)
+) -> Dict[str, Any]:
+    params = {"user_id": user_id, "perm_key": perm_key, "max_depth": max_depth}
+
+    query = """
+    MATCH path = shortestPath((u:User {user_id: $user_id})-[*1..]->(p:Permission {key: $perm_key}))
+    WHERE length(path) <= $max_depth
+    """
+
+    conditions = []
+    if at:
+        conditions.append(
+            "all(rel IN relationships(path) WHERE (rel.valid_from IS NULL OR rel.valid_from <= $at) AND (rel.valid_until IS NULL OR rel.valid_until >= $at))")
+        params["at"] = at
+    if scope:
+        conditions.append("all(rel IN relationships(path) WHERE rel.scope = $scope)")
+        params["scope"] = scope
+
+    if conditions:
+        query += " AND " + " AND ".join(conditions)
+
+    query += f"""
+    WITH path, length(path) AS depth
+    ORDER BY depth ASC
+    LIMIT {limit_paths}
+    RETURN 
+        [n IN nodes(path) | {{id: elementId(n), labels: labels(n), props: properties(n)}}] AS nodes,
+        [rel IN relationships(path) | {{type: type(rel), props: properties(rel)}}] AS edges,
+        depth AS path_length,
+        CASE WHEN length(path) > 0 THEN True ELSE False END AS granted
+    """
+
+    try:
+        with driver.session() as session:
+            results = session.run(query, **params).data()
+
+            if not results:
+                return {"granted": False, "paths": []}
+
+            serialized_results = []
+            for r in results:
+                serialized = {}
+                for key, value in r.items():
+                    serialized[key] = serialize_neo4j_data(value)
+                serialized_results.append(serialized)
+
+            return {
+                "granted": True,
+                "paths": [
+                    {
+                        "nodes": r["nodes"],
+                        "edges": r["edges"],
+                        "path_length": r["path_length"]
+                    } for r in serialized_results
+                ]
+            }
+    except Exception as e:
+        raise HTTPException(500, detail=f"Database error: {str(e)}")
