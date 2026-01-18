@@ -81,3 +81,64 @@ def has_role(
 
     except Exception as e:
         raise HTTPException(500, detail=f"Database error: {str(e)}")
+
+@router.get("/{user_id}/has-permission/{perm_key}")
+def has_permission(
+        user_id: str,
+        perm_key: str,
+        at: Optional[datetime] = Query(None),
+        scope: Optional[str] = Query(None)
+) -> Dict[str, Any]:
+    params = {"user_id": user_id, "perm_key": perm_key}
+
+    query = """
+    MATCH path = (u:User {user_id: $user_id})-[hr:HAS_ROLE]->(dr:Role)-[:ROLE_INHERITS*0..]->(r:Role)-[:ROLE_HAS_PERMISSION]->(p:Permission {key: $perm_key})
+    """
+
+    conditions = []
+    if at:
+        conditions.append(
+            "(hr.valid_from IS NULL OR hr.valid_from <= $at) AND (hr.valid_until IS NULL OR hr.valid_until >= $at)")
+        params["at"] = at
+    if scope:
+        conditions.append("hr.scope = $scope")
+        params["scope"] = scope
+
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+
+    query += """
+    RETURN DISTINCT 
+        r.key AS via_role,
+        properties(hr) AS params
+    """
+
+    try:
+        with driver.session() as session:
+            results = session.run(query, **params).data()
+
+            if not results:
+                return {
+                    "has": False,
+                    "via_roles": [],
+                    "params_list": []
+                }
+
+            serialized_results = []
+            for r in results:
+                serialized = {}
+                for key, value in r.items():
+                    serialized[key] = serialize_neo4j_data(value)
+                serialized_results.append(serialized)
+
+            via_roles = list(set(r["via_role"] for r in serialized_results))
+            params_list = [r["params"] for r in serialized_results]
+
+            return {
+                "has": True,
+                "via_roles": via_roles,
+                "params_list": params_list
+            }
+
+    except Exception as e:
+        raise HTTPException(500, detail=f"Database error: {str(e)}")
