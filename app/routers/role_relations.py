@@ -23,11 +23,18 @@ def add_permission_to_role(role_id: str, body: Dict = Body(...)):
     perm_id = body.get("permission_id")
     perm_key = body.get("permission_key")
 
-    if not (perm_id or perm_key):
+    if not (perm_id or perm_key or role_id):
         raise HTTPException(400, detail="Provide 'permission_id' or 'permission_key'")
 
     try:
         with driver.session() as session:
+            role = session.run(
+                "MATCH (r:Role {key: $key}) RETURN elementId(r) AS id",
+                key=role_id
+            ).single()
+            if not role:
+                raise HTTPException(404, detail="Role not found")
+            role_id = role["id"]
             if perm_key:
                 perm = session.run(
                     "MATCH (p:Permission {key: $key}) RETURN elementId(p) AS id",
@@ -46,7 +53,7 @@ def add_permission_to_role(role_id: str, body: Dict = Body(...)):
                 role_id=role_id, perm_id=perm_id
             )
 
-        return {"status": "permission added to role"}
+        return {"status": "Permission added to role", "role_id": role_id, "perm_id": perm_id}
     except Exception as e:
         raise HTTPException(500, detail=f"Database error: {str(e)}")
 
@@ -54,6 +61,20 @@ def add_permission_to_role(role_id: str, body: Dict = Body(...)):
 def remove_permission_from_role(role_id: str, perm_id: str):  
     try:
         with driver.session() as session:
+            role = session.run(
+                "MATCH (r:Role {key: $key}) RETURN elementId(r) AS id",
+                key=role_id
+            ).single()
+            if not role:
+                raise HTTPException(404, detail="Role not found")
+            role_id = role["id"]
+            perm = session.run(
+                "MATCH (p:Permission {key: $key}) RETURN elementId(p) AS id",
+                key=perm_id
+            ).single()
+            if not perm:
+                raise HTTPException(404, detail="Permission not found")
+            perm_id = perm["id"]
             result = session.run(
                 """
                 MATCH (r:Role)-[rel:ROLE_HAS_PERMISSION]->(p:Permission)
@@ -143,6 +164,13 @@ def get_role_permissions(
 ):
     try:
         with driver.session() as session:
+            role = session.run(
+                "MATCH (r:Role {key: $key}) RETURN elementId(r) AS id",
+                key=role_id
+            ).single()
+            if not role:
+                raise HTTPException(404, detail="Role not found")
+            role_id = role["id"]
             if mode == "direct":
                 query = """
                 MATCH (r:Role)-[:ROLE_HAS_PERMISSION]->(p:Permission)
