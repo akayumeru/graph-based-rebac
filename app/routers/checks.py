@@ -22,7 +22,6 @@ def serialize_neo4j_data(data):
 def has_role(
     user_id: str,
     role_key: str,
-    at: Optional[datetime] = Query(None, description="Дата проверки (по умолчанию сейчас)"),
     scope: Optional[str] = Query(None, description="Scope для фильтра"),
     aggregate: bool = Query(False, description="Вернуть все совпадающие пути вместо ближайшего")
 ) -> Dict[str, Any]:
@@ -33,9 +32,6 @@ def has_role(
     """
 
     conditions = []
-    if at:
-        conditions.append("(hr.valid_from IS NULL OR hr.valid_from <= $at) AND (hr.valid_until IS NULL OR hr.valid_until >= $at)")
-        params["at"] = at
     if scope:
         conditions.append("hr.scope = $scope")
         params["scope"] = scope
@@ -86,7 +82,6 @@ def has_role(
 def has_permission(
         user_id: str,
         perm_key: str,
-        at: Optional[datetime] = Query(None),
         scope: Optional[str] = Query(None)
 ) -> Dict[str, Any]:
     params = {"user_id": user_id, "perm_key": perm_key}
@@ -96,10 +91,6 @@ def has_permission(
     """
 
     conditions = []
-    if at:
-        conditions.append(
-            "(hr.valid_from IS NULL OR hr.valid_from <= $at) AND (hr.valid_until IS NULL OR hr.valid_until >= $at)")
-        params["at"] = at
     if scope:
         conditions.append("hr.scope = $scope")
         params["scope"] = scope
@@ -148,7 +139,6 @@ def has_permission(
 def decision_role(
         user_id: str,
         role_key: str,
-        at: Optional[datetime] = Query(None),
         scope: Optional[str] = Query(None),
         max_depth: int = Query(5, ge=1, le=10),
         limit_paths: int = Query(3, ge=1, le=10)
@@ -161,10 +151,6 @@ def decision_role(
     """
 
     conditions = []
-    if at:
-        conditions.append(
-            "all(rel IN relationships(path) WHERE (rel.valid_from IS NULL OR rel.valid_from <= $at) AND (rel.valid_until IS NULL OR rel.valid_until >= $at))")
-        params["at"] = at
     if scope:
         conditions.append("all(rel IN relationships(path) WHERE rel.scope = $scope)")
         params["scope"] = scope
@@ -215,7 +201,6 @@ def decision_role(
 def decision_permission(
         user_id: str,
         perm_key: str,
-        at: Optional[datetime] = Query(None),
         scope: Optional[str] = Query(None),
         max_depth: int = Query(5, ge=1, le=10),
         limit_paths: int = Query(3, ge=1, le=10)
@@ -228,10 +213,6 @@ def decision_permission(
     """
 
     conditions = []
-    if at:
-        conditions.append(
-            "all(rel IN relationships(path) WHERE (rel.valid_from IS NULL OR rel.valid_from <= $at) AND (rel.valid_until IS NULL OR rel.valid_until >= $at))")
-        params["at"] = at
     if scope:
         conditions.append("all(rel IN relationships(path) WHERE rel.scope = $scope)")
         params["scope"] = scope
