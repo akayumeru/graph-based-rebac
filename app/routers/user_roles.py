@@ -42,22 +42,14 @@ def assign_role_to_user(user_id: str, assign: UserRoleAssign):
                 MATCH (u:User {user_id: $user_id})
                 MATCH (r:Role) WHERE elementId(r) = $role_id
                 MERGE (u)-[hr:HAS_ROLE {
-                    scope: $scope,
-                    valid_from: $valid_from,
-                    valid_until: $valid_until,
-                    can_delete_posts: $can_delete_posts,
-                    max_posts_per_day: $max_posts_per_day
+                    scope: $scope
                 }]->(r)
                 """,
                 user_id=user_id,
                 role_id=role_id,
                 scope=assign.scope,
-                valid_from=assign.valid_from,
-                valid_until=assign.valid_until,
-                can_delete_posts=assign.can_delete_posts,
-                max_posts_per_day=assign.max_posts_per_day
             )
-        return {"status": "role assigned"}
+        return {"status": "role assigned", "user_id": user_id, "role_id": role_id, "scope": assign.scope}
     except Exception as e:
         raise HTTPException(500, detail=f"Database error: {str(e)}")
 
@@ -114,11 +106,7 @@ def get_user_roles(
 
     query += """
     RETURN DISTINCT r.key AS role_key,
-           hr.scope AS scope,
-           hr.valid_from AS valid_from,
-           hr.valid_until AS valid_until,
-           hr.can_delete_posts AS can_delete_posts,
-           hr.max_posts_per_day AS max_posts_per_day
+           hr.scope AS scope
     """
 
     try:
@@ -135,11 +123,7 @@ def get_user_roles(
             return [
                 {
                     "role": r["role_key"],
-                    "scope": r["scope"],
-                    "valid_from": r["valid_from"],
-                    "valid_until": r["valid_until"],
-                    "can_delete_posts": r["can_delete_posts"],
-                    "max_posts_per_day": r["max_posts_per_day"]
+                    "scope": r["scope"]
                 }
                 for r in serialized_results if r["role_key"] is not None
             ]
