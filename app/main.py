@@ -38,6 +38,14 @@ def init_neo4j_schema():
 @app.on_event("startup")
 async def startup_event():
     init_neo4j_schema()
+    try:
+        from app.init_data import DataInitializer
+        initializer = DataInitializer()
+        initializer.run()
+    except ImportError:
+        print("Module app.init_data not found - skipping data initialization")
+    except Exception as e:
+        print(f"Warning: Data initialization failed: {e}")
 
 @app.on_event("shutdown")
 def shutdown_event():
