@@ -79,7 +79,6 @@ def remove_role_from_user(user_id: str, role_id: str):
 def get_user_roles(
         user_id: str,
         mode: str = Query("direct", pattern="^(direct|effective)$"),
-        at: Optional[datetime] = Query(None),
         scope: Optional[str] = Query(None)
 ) -> List[Dict[str, Any]]:
     params = {"user_id": user_id}
@@ -93,10 +92,6 @@ def get_user_roles(
         query += "-[hr:HAS_ROLE]->(dr:Role)-[:ROLE_INHERITS*0..]->(r:Role) "
 
     conditions = []
-    if at:
-        conditions.append(
-            "(hr.valid_from IS NULL OR hr.valid_from <= $at) AND (hr.valid_until IS NULL OR hr.valid_until >= $at)")
-        params["at"] = at
     if scope:
         conditions.append("hr.scope = $scope")
         params["scope"] = scope

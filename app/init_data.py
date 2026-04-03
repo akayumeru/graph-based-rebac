@@ -41,9 +41,7 @@ class DataInitializer:
                 session.run(
                     """
                     MERGE (r:Role {key: $key})
-                    SET r.description = $description,
-                        r.level = $level,
-                        r.category = 'academic'
+                    SET r.description = $description
                     """,
                     key=role_key, description=description, level=level
                 )
